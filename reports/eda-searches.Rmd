@@ -1,11 +1,13 @@
 ---
-title: "EDA buscas"
-output: html_notebook
+title: "L2P2 - Exercício Wikimedia"
+output:
+  html_document:
+    df_print: paged
 ---
 
-O objeto principal da análise são as buscas e a navegação depois da busca. Criamos esses dados a partir dos dados originais da wikimedia em `/data/search_data.csv`. 
+**Aluna:** Yngrid Keila Silva Cabral
 
-Aqui, exploramos esses dados. 
+O objeto principal da análise são as buscas e a navegação depois da busca. Criamos esses dados a partir dos dados originais da wikimedia em `/data/search_data.csv`. 
 
 ```{r setup}
 library(tidyverse)
@@ -15,12 +17,330 @@ theme_set(theme_bw())
 ```
 
 ```{r ETL}
-buscas = read_csv(here::here("data/search_data.csv"))
+buscas = read_csv(here::here("data/search_data.csv")) %>%
+    mutate(day = round_date(session_start_date, unit = "day")) %>%
+    group_by(session_id) %>%
+    mutate(clicks = ifelse(num_clicks > 0, 1, 0))
 ```
+
+# 1- Observação da distribuição das variáveis que serão abordadas nas análises
+
+Foram feitos alguns gráficos e tabelas para observar características inerentes à distribuição das variáveis que serão utilizadas nas análises para responder as quantro perguntas da Wikimedia. Foram observdas as variáveis _group_, _results_, _first_click_, _num_clicks_ e _session_length_. Foi criada uma nova coluna nos dados contendo o dia, o qual foi estraído da variável _session_start_date_. Para a análise específica de duas das perguntas, foram criadas também duas colunas, as quais serão apresentadas nas respectivas perguntas. 
+
+### 1.1- _group_
+
+Os dados analisados neste trabalho foram coletados de dois grupos, o **a** e o **b**, em que cada um foi submetido a um algoritmo de busca diferente, e algumas métricas foram medidas. Os dados organizados de modo que cada linha da tabela dos dados corresponde a uma busca feita, deste modo, a tabela apresentada a seguir apresenta a quantidade de dados coletados para os grupos **a** e **b**, na perspectiva de buscas realizadas. A partir datebale é perceptível que o grupo **a** apresenta mais dados de busca em relação ao grupo **b**. Isso pode ser explicado pelo fato de provavelmente se tratar do teste de uma solução nova, em que geralmente é disponibilizada primeiramente para um grupo pequeno testar. Como não há informações específicas sobre como os testes foram realizados cabe apenas especulações. O total de dados de busca foi 16.234.
+
+```{r}
+buscas %>%
+    group_by(group) %>%
+    summarise(Amount = length(group))
+```
+
+### 1.2- _Results_
+
+Ao realizar uma busca por meio de alguma ferramenta de busca é do senso comum esperar que algo seja retornado, porém, pode ocorrer da busca não retornar nenhum resultado. Esta variável descreve justamente a quantidade de respostas retornadas para cada busca realizada. A seguir são apresentadas algumas visualizações para poder observar melhor a distribuição desta variável.
+
+Primeiramente foi observada a distribuição dos dados por meio de um histograma para todos os dados. Por meio desta visualização observa-se que a maior quantidade de resultados observados encontra-se acima de 0, porém, é visto que há uma quantidade significativa de 0 resultados retornados no geral.
 
 ```{r}
 buscas %>% 
     ggplot(aes(x = results)) + 
-    geom_histogram(binwidth = 5) 
+    geom_histogram(binwidth = 5) + 
+    labs(x = "Quantidade de resultados retornados", y = "Frequência")
+    
 ```
 
+Os dados tabém foram observados agrupoados por meio dos grupos, conforme pode ser observado a seguir. Observa-se que no geral os dois grupos apresentam uma mesma quantidade de resultados retornados, em torno de 0 e aproximadamente 30, porém, o grupo **b** apresenta menos valores altos e extremos em relação aos resultados do grupo **a**. Isto também pode ser resultado da maior quantidade de dados de busca coletados que o grupo **a** apresenta em relação ao grupo **b**
+
+```{r}
+buscas %>%
+    group_by(group) %>%
+    ggplot(aes(y = results, x = group)) +
+    geom_boxplot() + 
+    labs(y = "Quantidade de resultados retornados", x = "Grupo")
+```
+
+Para ficar mais claro a observação de algumas características foi gerada uma tabela com algumas métricas quantitativas, em que pode ser observado a seguir. Os valores máximo e mínimo para ambos os grupos foram iguais, ou seja, não houve uma busca em que o algoritmo de busca de um grupo foi maior que o outro. A média dos grupos foram diferentes, sendo maior para o grupo **a**, isso pode ocorrer pelo fato deste grupo possui uma maior quantidade de dados, bem como, uma maior quantidade de valores altos. E por fim, a mediana e moda são iguais para ambos os grupos, logo, a maior quantidade de resultados retornados para as buscas realizadas para ambos os grupos foi 20.
+
+```{r}
+buscas %>%
+    group_by(group) %>%
+    summarise(
+        Maximo = max(results),
+        Minimo = min(results),
+        Media = mean(results),
+        Mediana = median(results),
+        Moda = names(table(buscas$results))[table(buscas$results) == max(table(buscas$results))]
+    )
+```
+
+### 1.3- first_click
+
+Outra variável analisada foi a _first_click_, que trata-se do primeiro resultado que o usuário clicou após a busca ser feita. Esta variável possui uma certa quantidade de valores _NA_, por este motivo estes valores foram filtrados. Inicialmente foi plotado um gráfico de pontos para observar o comportamento desta variável de modo geral. Por meio desta visualização é possível obbservar que há uma diferença significativa do comportamento de ambos os grupos. O grupo **b** possui os dados concentrados próximos à 0, não apresentando valores extremos, já o grupo **a** apresenta uma concentração de valores entre 0 e aproximadamente 600, ou seja, uma maior amplitude em relação ao grupo anterior, e apresenta alguns valores extremos. Alguns dos valores extremos do grupo **a** encontram-se em torno de 4000, o que é um comportamento bastante inésperado em relação aos demais dados, por este motivo, estes valores serão desconsiderados a partir de agora.
+
+```{r}
+fclick_sem_na = buscas %>%
+    filter(first_click != "NA")
+
+fclick_sem_na %>%
+    ggplot(aes(y = first_click, x = group)) +
+    geom_point(alpha=.5) + 
+    labs(y = "Primeiro resultado escolhido", x = "Grupo")
+```
+
+Também foram observados valores quantitativos para esta variável, conforme apesentado a seguir. A quantidade de dados do _first_click_ para ambos os grupos é menor que a quantidade de dados por grupo no geral devido as filtragens realizadas. O valor máximo é bastante diferente para os grupos, conforme pôde ser observado na visualização anterior, já o valor mínimo é iguem, pois, o resultado mínimo que o usuário pode escolher é o primeiro. A média dos grupos são diferentes, sendo maior para o grupo **a**, o que já era um comportamento esperado tendo em vista que este grupo possui uma maior amplitude dos dados e uma maior incidência de valores altos. Por fim, a mediana é igual para ambos os grupos e igual ao valor mínimo, podendo levar a crer que este é o valor que mais se repete nos dados.
+
+```{r}
+options(scipen = 999)
+
+fclick_sem_na = buscas %>%
+    filter(first_click != "NA" , first_click < 2000)
+
+fclick_sem_na %>%
+    group_by(group) %>%
+    summarise(
+        Quantidade = length(first_click),
+        Maximo = max(first_click),
+        Minimo = min(first_click),
+        Media = mean(first_click),
+        Mediana = median(first_click)
+    )
+
+```
+
+
+### 1.4- num_clicks
+
+A variável _num_clicks_ diz respeito ao número de vezes que o usuário selecionou alguma resposta durante uma busca. Para esta variável também foram geradas visualizações no geral e por grupo, além de uma tabela com dados quantitativos. O gráfico de barras que apresenta os dados no geral apresenta uma grande concentração dos dados próximo a 0. Por meio da visualização gerada por grupo observa-se que ambos os grupos apresentam uma grande concentração próximo à 0, porém, o grupo **a** apresenta uma maior incidência de valores altos em relação ao grupo **b**
+
+```{r}
+buscas %>%
+    ggplot(aes(x = num_clicks)) + 
+    geom_histogram(binwidth = 1) +
+    labs(x = "Número de Clicks", y = "Frequência")
+
+buscas %>%
+    ggplot(aes(x = num_clicks)) + 
+    geom_histogram(binwidth = 2) +
+    facet_wrap(~ group, labeller = label_parsed) + 
+    labs(x = "Número de Clicks", y = "Frequência")
+```
+
+Por meio dos dados quantitativos observa-se que a diferença do valor máximo dos grupos **a** e **b** é bastante significativo, bem como que a média para o grupo **a** é maior em relação à média do grupo **b**, que pode ser resultante da amplitude e quantidade de dados do grupo **a**.
+
+```{r}
+buscas %>%
+    group_by(group) %>%
+    summarise(Quantidade = length(num_clicks),
+        Maximo = max(num_clicks),
+        Minimo = min(num_clicks),
+        Media = mean(num_clicks),
+        Mediana = median(num_clicks)
+    )
+```
+
+### 1.5- session_length
+
+O tamanho da sessão é aproximadamente o tempo entre o primeiro e o último evento em segundos. O gráfico a seguir apresenta o tamanho das sessões no geral em relação aos grupos **a** e **b**, em que por meio deste é possível observar que ambos os grupos possuem uma concentração no intervalo de 0 à 100000. O grupo **b** não apresenta valores extremos, já o grupo **a** apresenta um valor extremo em torno de 500000. Tendo em vista que o valor extremo está bastante longe do comportamento dos demais dados este será filtrado.
+
+```{r}
+
+buscas %>%
+    ggplot(aes(x = group, y = session_length)) + 
+    geom_point() + 
+    labs(y = "Tamanho da Sessão", x = "Grupo")
+
+```
+
+
+
+```{r}
+buscas %>%
+    group_by(group) %>%
+    summarise(Quantidade = length(session_length),
+        Maximo = max(session_length),
+        Minimo = min(session_length), 
+        Media = mean(session_length),
+        Mediana = median(session_length),
+    )
+```
+
+# 2- Perguntas da Wikimedia
+
+### 2.1- Qual é a nossa taxa de cliques geral diária? Como isso varia entre os grupos?
+
+A taxa de clique é a a proporção de sessões de pesquisa em que o usuário clicou em um dos resultados exibidos, segundo a definição dada pela Wikimedia. Para tal inicialmente foi criada uma nova coluna chamada _clicks_ à tabela _buscas_. 
+
+Tendo em vista que cada linha da tabela _buscas_ diz respeito a uma busca feita, uma sessão pode abranger várias linhas, ou seja, pode vários valores distintos para a variável _num_clicks_, deste modo, os dados foram agrupados por sessão, por meio da variável _session_id_, para facilitar a análise. Após isso foi analisado cada valor da variável _num_clicks_ dentro da sessão para verificar se este é maior que 0, ou seja, se houve pelo menos um click, em caso positivo é retornado 1, caso contrário é retornado 0. Por fim, a nova coluna _clicks_ vai ser composta de 0s e 1s. O código utilizado é apresentado a seguir.
+
+```{r}
+buscas %>%
+    group_by(session_id) %>%
+    mutate(clicks = ifelse(num_clicks>0,1,0))
+```
+
+A partir deste ponto os dados da nova coluna podem ser utilizados para a análise de taxa de clique. Primeiro foi criado um sumário contendo uma variável _click_, que possuia o valor 1 se pelo menos um dos valores _num_clickes_ da sessão fosse 1, e 0 caso contrário, também possuia o dia e o grupo da referida sessão. Esses valores foram reunidos para cada sessão, identificada pela variável _session_id_, conforme pode ser visto a seguir. 
+
+```{r}
+taxa_clicks = buscas %>%
+    group_by(session_id) %>%
+    summarise(click = max(clicks),
+              day = max(day),
+              group = max(group))
+
+show(taxa_clicks)
+```
+
+Após isso foi gerado um sumário da taxa de clique no geral, agrupando os dados por dia. A variável _clickthrough_rate_ deste sumário foi gerada por meio da relação do número de valores 1 da variável _click_ do sumário anterio, pela quantidade de sessões. Para ambas as varivável o cálculo foi feito por dia, gerando assim a taxa de cliques diária.
+
+```{r}
+clickthrough_rate_general = taxa_clicks %>%
+    group_by(day) %>%
+    summarise(clickthrough_rate = (sum(click)/length(session_id)))
+    
+show(clickthrough_rate_general)
+```
+
+Por meio desta variável gerada foi possível gerar o gráfico a seguir, contendo a taxa de cliques por dia. Por meio deste, observa-se que no geral a taxa de clique diária encontra-se abaixo de 40%, e que há uma variação de um dia para outro, porém, a variação é pequena. Também é possível apontar que o dia 2 apresenta a menor taxa e que o dia 4 apresenta a maior taxa no geral.
+
+```{r}
+clickthrough_rate_general %>%
+    ggplot(aes(x = day ,y = clickthrough_rate)) +
+    geom_bar(stat = "identity") + 
+    labs(x = "Dia", y = "Taxa de Click Diário")
+```
+
+A segunda parte da perta da Wikimedia diz respeito a observar o comportamento da taxa de clique diário por grupo. Para tal, foi gerado um novo sumário por meio do anterior em que os dados eram agrupados por meio do dia e do grupo, conforme pode ser observado a seguir.
+
+```{r}
+clickthrough_rate_group = taxa_clicks %>%
+    group_by(day,group) %>%
+    summarise(clickthrough_rate = (sum(click)/length(session_id)))
+    
+show(clickthrough_rate_group)
+```
+
+Por meio desse foi gerado o gráfico de barras mostrado a seguir, em que os dados estão agrupados por dia e por grupo. Observa-se que o grupo **a** apresenta uma taxa de clique diária bastante superior que o grupo **b**, e que há uma variação na taxa de clique diária do grupo **a**, porém, é uma varição pequena. O grupo **b** também apresenta uma variação na taxa de cliques por dia, seno levemente maior que a do grupo **a**.
+
+```{r}
+clickthrough_rate_group %>%
+    ggplot(mapping = aes(x = day ,y = clickthrough_rate, fill = group)) +
+    geom_bar(stat = "identity", position = "dodge") + 
+    labs(x = "Dia", y = "Taxa de Click Diário")
+```
+
+
+### 2.2- Quais resultados as pessoas tendem a tentar primeiro? Como isso muda no dia-a-dia?
+
+Foi utilizada a variável _first_click_ e conforme discutido na Seção 1.3, foram filtrados dos dados os valores _NAs_ e os valores extremos em torno de 4000. Para responder a primeira parte desta pergunta foi gerado um gráfico de barras, em que se podia perceber que os dados apresentavam uma concentração próximo à 0, porém tendo em vista que o menor resultado que o usuário pode escolher é 1, o gráfico não possibilitava uma visão mais clara de que a maior ocorrência dos dados era no valor 1. Por este motivo, a escala do eixo horizontal foi convertida para a escala logarítmica, pois deste modo o 0 seria retirado da escala, tornando assim mais clara a visão de que a maior ocorrência da variável _first_click_ é no valor 1, como pode ser visto a seguir. 
+
+```{r}
+options(scipen = 999)
+
+fclick_sem_na = buscas %>%
+    filter(first_click != "NA", first_click < 2000)
+
+fclick_sem_na %>%
+    ggplot(aes(x = first_click)) + 
+    geom_histogram(binwidth = 1) +
+    scale_x_log10() + 
+    labs(x = "Primeiro resultado escolhido", y = "Frequência")
+```
+
+Para verificar se a tendência da primeira escolha do usuário varia por dia o gráfico anterior foi reorganizados de modo que os dados foram agrupados por dos. Nesta visualização observa-se que por mais que haja uma variação no geral para cada dia, o resultado que os usuários tendem a tentar primeiro é o primeiro resultado.
+
+```{r}
+fclick_sem_na %>%
+    ggplot(aes(x = first_click)) + 
+    geom_histogram(binwidth = 1) +
+    scale_x_log10() +
+    facet_wrap(~ day, labeller = label_parsed) + 
+    labs(x = "Primeiro resultado escolhido", y = "Frequência")
+```
+
+
+### 2.3- Qual é a nossa taxa de resultados zero no geral? Como isso varia entre os grupos?
+
+
+A taxa de resultados zero trata-se da proporção de pesquisas que resultaram em 0 resultados, segundo a definição fornecida pela Wikimedia. Inicialmente foi criada uma nova coluna _n_zero_results_ contando 1 para os resultados que retornaram 0 e 0 caso contrário. Após isso foi gerado um sumário contendo os dados agrupados por dia, em que foi gerada a variável _zero_results_rate_ composta pela relação da quantidade de 1s da coluna _n_zero_results_ pela quantidade de resultados retornados. O cálculo da taxa de resultados zero foi feito por dia, conforme mostrado a seguir.
+
+```{r}
+zero_results = buscas %>%
+    group_by(day) %>%
+    mutate(n_zero_results = ifelse(results==0,1,0))
+
+zero_results_rate_general = zero_results %>%
+    group_by(day) %>%
+    summarise(zero_results_rate = sum(n_zero_results)/length(results))
+
+show(zero_results_rate_general)
+```
+
+Por meio dos dados gerados para a variável _zero_results_rate_, foi gerado um gráfico de barras agrupando os dados por dia. Ao observar o gráfico percebe-se que a maioria dos das taxas encontram-se abaixo de 20%, com exceção do primeiro dia que encontra-se um pouco acima deste valor. De um modo geral observa-se que o primeiro e o último dia apresentam uma maior taxa de resultados zero em relação aos demais dias e que há uma pequena variação entre o segundo e o oitavo dia.
+
+```{r}
+zero_results_rate_general %>%
+    ggplot(aes(x = day ,y = zero_results_rate)) +
+    geom_bar(stat = "identity") + 
+    labs(x = "Dia", y = "Taxa de resultados zero")
+```
+
+Para responder a segunda parte da pergunta foi gerado um sumário em que os dados foram agrupados por dia e por grupo, fazendo o mesmo cálculo de proporção diário citado anteriormente.
+
+```{r}
+
+zero_results_rate_group = zero_results %>%
+    group_by(day, group) %>%
+    summarise(zero_results_rate = sum(n_zero_results)/length(results))
+
+show(zero_results_rate_group)
+```
+
+Utilizando os dados reagrupados foi gerado um gráfico de barras agrupando as informações por dia e por grupo, como pode ser observado a seguir. Neste gráfico não há um grupo que marjoritáriamente está sempre acima ou abaixo do outro. No geral os dados dos grupos **a** e **b**, com exceção do primeiro dia. O grupo **a** apresenta o último dia como a segunda maior taxa e o quinto dia como a menor taxa, já o grupo **b** apresenta o sexto dia como o segundo maior e o terceiro como a menor taxa, como mostrado a seguir.
+
+```{r}
+zero_results_rate_group %>%
+    ggplot(mapping = aes(x = day ,y = zero_results_rate, fill = group)) +
+    geom_bar(stat = "identity", position = "dodge") + 
+    labs(x = "Dia", y = "Taxa de resultados zero")
+```
+
+
+### 2.4- A duração da sessão é aproximadamente o tempo entre o primeiro e o último evento de uma sessão. Escolha uma variável do conjunto de dados e descreva sua relação com o tamanho da sessão. Visualize o relacionamento.
+
+A medida que a duração da sessão aumenta o número de clicks tende a aumentar? Há uma correlação entre essas variáveis?. Por senso comum pode-se acredtar que há correlação entre estas variáveis, porém, para confirmar ou refutar isso análises precisam ser feitas. Para tal será analisada a correlação entre as variáveis _num_clicks_ e _session_length_.
+
+Tendo em vista que uma única sessão pode ter várias linhas na tabela, os dados serão agrupados pelo id da sessão. Após isso a sessão pode apresentar diferentes valores _num_clicks_ e valores refetidos para a variável _session_length_, por este motivo, foi gerado um sumário contendo a soma dos diferentes valores da variável _num_clicks_, gerando assim apenas um valor para a sessão, e foi pego um dos valores da variável _session_length_, tendo em vista que é um valor repetido. Por fim, resultou em um sumário em que para cada id da sessão há um único número de clicks e um único tamanho da sessão. A reorganização feita pode ser vista a seguir.
+
+```{r}
+busca_filtrado = buscas %>%
+    filter(session_length < 400000)
+
+clicks_per_session = busca_filtrado %>%
+    group_by(session_id) %>%
+    summarise(num_clicks_per_session = sum(num_clicks),
+           unique_session_length = max(session_length))
+
+show(clicks_per_session)
+```
+
+Por meio destes dados gerados foi criado um gráfico de pontos em que o eixo vertical disrespeito ao número de clicks por sessão e o eixo horizontal diz respeito aos tamanhos das sessões. Ao observar o gráfico percebe-se que há uma maior concentração dos dados no intervalo de 10 à 1000 em relação ao eixo horizontal e uma concentração no intervalo 0 à 20 para o eixo vertical. Os dados também apresentam um comportamento crescente positivo, porém, não muito forte o que não torna totalmente seguro afirmar.
+
+```{r}
+clicks_per_session %>%
+    ggplot(aes(x = unique_session_length, y = num_clicks_per_session)) + 
+    geom_point() +
+    scale_x_log10() +
+    labs(x = "Tamanho da Sessão", y = "Número de clicks por Sessão")
+```
+
+Também foram analisados os coeficientes de correlação de _Pearson_, _Spearman_ e _Kendall_. O coeficiente de correlação de _Pearson_ indica que a correlação entre os dados é fraca, tendo em vista que esse coeficiente é voltado para dados que apresentam um comportamento linear, porém, claramente os dados apresentam um comportamento não linear. Já os coeficientes de _Spearman_ e _Kendall_ indicam que os dados apresentam uma correlação forte, tendo em vista que esses coeficientes são voltados para dados com comportamento não linear, ou seja, a tendência observada no gráffico anterior foi confirmada por meio dos coeficientes de _Spearman_ e _Kendall_.
+
+```{r}
+clicks_per_session %>%
+    summarise(Pearson = cor(unique_session_length, num_clicks_per_session, method = c("pearson")),
+              Kendall = cor(unique_session_length, num_clicks_per_session, method = c("kendall")),
+              Spearman = cor(unique_session_length, num_clicks_per_session, method = c("spearman"))
+    )
+```
